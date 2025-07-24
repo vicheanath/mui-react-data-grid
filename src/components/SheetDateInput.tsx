@@ -1,12 +1,7 @@
 import React, { useState } from "react";
-import dayjs from "dayjs";
-import customParseFormat from "dayjs/plugin/customParseFormat";
 import { GlobalStyles } from "@mui/material";
 import type { SheetInputProps } from "./SheetTextInput";
 import { SheetCellBase } from "./SheetCellBase";
-
-// Extend dayjs for strict parsing of YYYY-MM-DD
-dayjs.extend(customParseFormat);
 
 export const SheetDateInput = React.memo(
   React.forwardRef<HTMLInputElement, SheetInputProps>(
@@ -15,39 +10,31 @@ export const SheetDateInput = React.memo(
       ref
     ) {
       const [focused, setFocused] = useState(false);
-      const [error, setError] = useState(false);
-      const valueString = value === null ? "" : String(value);
+      // Format incoming ISO string value for native date input
+      const valueString = value
+        ? new Date(String(value)).toISOString().slice(0, 10)
+        : "";
 
-      // On blur, validate and reformat
+
+      console.log("SheetDateInput value:", value);
+      // Simplified blur handler without validation
       const handleBlurField = () => {
-        if (valueString) {
-          const parsed = dayjs(valueString, "YYYY-MM-DD", true);
-          if (!parsed.isValid()) {
-            setError(true);
-            return;
-          }
-          setError(false);
-          const formatted = parsed.format("YYYY-MM-DD");
-          if (formatted !== valueString) {
-            const evt = {
-              target: { name: name ?? "", value: formatted },
-            } as React.ChangeEvent<HTMLInputElement>;
-            onChange(evt);
-          }
-        } else {
-          setError(false);
-        }
         setFocused(false);
         onBlur();
       };
 
       return (
         <>
-        <GlobalStyles
+          <GlobalStyles
             styles={{
-              ".hide-date-input::-webkit-calendar-picker-indicator": { display: "none" },
-              ".hide-date-input::-webkit-inner-spin-button, .hide-date-input::-webkit-clear-button": { display: "none" },
-              ".hide-date-input::-ms-clear, .hide-date-input::-ms-expand": { display: "none" },
+              ".hide-date-input::-webkit-calendar-picker-indicator": {
+                display: "none",
+              },
+              ".hide-date-input::-webkit-inner-spin-button, .hide-date-input::-webkit-clear-button":
+                { display: "none" },
+              ".hide-date-input::-ms-clear, .hide-date-input::-ms-expand": {
+                display: "none",
+              },
             }}
           />
           <SheetCellBase
@@ -65,9 +52,15 @@ export const SheetDateInput = React.memo(
                 ref={ref}
                 type="date"
                 value={valueString}
-                onChange={(e) =>
-                  onChange(e as React.ChangeEvent<HTMLInputElement>)
-                }
+                onChange={(e) => {
+                  // Convert selected YYYY-MM-DD into full ISO string
+                  const selectedDate = e.target.value;
+                  const isoValue = new Date(selectedDate).toISOString();
+                  const evt = {
+                    target: { name: name ?? "", value: isoValue },
+                  } as unknown as React.ChangeEvent<HTMLInputElement>;
+                  onChange(evt);
+                }}
                 onBlur={handleBlurField}
                 style={{
                   fontFamily: "monospace",
@@ -77,7 +70,7 @@ export const SheetDateInput = React.memo(
                   width: "100%",
                   border: "none",
                   boxSizing: "border-box",
-                  outline: error ? "1px solid red" : "none",
+                  outline: "none",
                 }}
                 data-row-index={rowIndex}
                 data-col-index={colIndex}
