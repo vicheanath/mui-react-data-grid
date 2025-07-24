@@ -186,7 +186,6 @@ const DataSheet: React.FC<DataSheetProps> = ({
       age: null,
       email: "",
       date: new Date().toISOString().slice(0, 10),
-      status: "pending",
       money: undefined,
     };
 

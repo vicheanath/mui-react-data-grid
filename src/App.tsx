@@ -53,11 +53,6 @@ function getRandomName(i: number) {
   }`;
 }
 
-function getRandomStatus(i: number) {
-  const statuses = ["active", "inactive", "pending"] as const;
-  return statuses[i % statuses.length];
-}
-
 const initialData: DataRow[] = Array.from({ length: 100 }, (_, i) => {
   const id = (i + 1).toString();
   const name = getRandomName(i);
