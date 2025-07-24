@@ -13,22 +13,27 @@ interface DataSheetRowProps {
 
 const DataSheetRow = React.memo<DataSheetRowProps>(
   ({ row, pendingSaves, deleteRow, style }) => {
+    const isRowSaving = pendingSaves.some((p) => p.id === row.original.id);
+
     return (
       <TableRow
         key={row.id}
         hover
-        sx={{ transition: "background 0.2s" }}
+        sx={{ 
+          transition: "background 0.2s",
+          "&:hover": { background: "#f9f9f9" },
+        }}
         style={style}
       >
         {row.getVisibleCells().map((cell) => (
           <TableCell
             key={cell.id}
             sx={{
-              borderRight: "1px solid #d1d5db",
-              borderBottom: "1px solid #d1d5db",
+              borderRight: "1px solid #e0e0e0",
+              borderBottom: "1px solid #e0e0e0",
               p: 0,
-              minWidth: 80,
-              height: 44,
+              minWidth: 120,
+              height: 48,
               position: "relative",
               background: "white",
               "&:last-child": { borderRight: 0 },
@@ -41,27 +46,16 @@ const DataSheetRow = React.memo<DataSheetRowProps>(
               alignItems="center"
               tabIndex={-1}
             >
-              {cell.column.id === "actions"
-                ? (() => {
-                    const isRowSaving = pendingSaves.some(
-                      (p) => p.id === row.original.id
-                    );
-                    return (
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <ActionCell
-                          onDelete={() => deleteRow(row.original.id)}
-                        />
-                        {isRowSaving && (
-                          <CircularProgress
-                            size={18}
-                            thickness={5}
-                            color="primary"
-                          />
-                        )}
-                      </Box>
-                    );
-                  })()
-                : flexRender(cell.column.columnDef.cell, cell.getContext())}
+              {cell.column.id === "actions" ? (
+                <Box display="flex" alignItems="center" gap={1} px={1}>
+                  <ActionCell onDelete={() => deleteRow(row.original.id)} />
+                  {isRowSaving && (
+                    <CircularProgress size={18} thickness={5} color="primary" />
+                  )}
+                </Box>
+              ) : (
+                flexRender(cell.column.columnDef.cell, cell.getContext())
+              )}
             </Box>
           </TableCell>
         ))}

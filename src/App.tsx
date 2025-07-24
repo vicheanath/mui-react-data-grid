@@ -1,7 +1,7 @@
 // App.tsx
 import React from "react";
-import { DataSheet } from "./DataSheet";
 import type { DataRow } from "./types";
+import DataSheet from "./DataSheet";
 
 function getRandomName(i: number) {
   const firstNames = [
@@ -58,7 +58,7 @@ function getRandomStatus(i: number) {
   return statuses[i % statuses.length];
 }
 
-const initialData: DataRow[] = Array.from({ length: 500 }, (_, i) => {
+const initialData: DataRow[] = Array.from({ length: 100 }, (_, i) => {
   const id = (i + 1).toString();
   const name = getRandomName(i);
   const age = 20 + (i % 40);

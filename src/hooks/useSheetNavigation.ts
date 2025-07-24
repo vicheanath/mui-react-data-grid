@@ -1,73 +1,76 @@
-// hooks/useSheetNavigation.ts
 import { useEffect, useCallback, type RefObject } from "react";
 
 export const useSheetNavigation = (
-  tableContainerRef: RefObject<HTMLDivElement>
+  tableContainerRef: RefObject<HTMLDivElement | null>
 ) => {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!tableContainerRef.current) return;
 
-      // Find the actual input/select inside the MUI Box wrapper
-      let activeElement = document.activeElement;
-      // If the focused element is not an input/select, but inside a .MuiBox-root, find the input/select inside
-      if (activeElement && activeElement.classList.contains("MuiBox-root")) {
-        const inner = activeElement.querySelector(
-          "input, select"
-        ) as HTMLElement | null;
-        if (inner) activeElement = inner;
+      // Find the actual input/select inside the cell
+      let activeElement = document.activeElement as HTMLElement;
+
+      // If focused on cell container, find its input
+      if (
+        activeElement?.dataset?.rowIndex &&
+        !activeElement.querySelector("input, select")
+      ) {
+        const input = activeElement.querySelector(
+          "input, select, textarea"
+        ) as HTMLElement;
+        if (input) activeElement = input;
       }
-      if (!activeElement) return;
-      // Check for data-row-index and data-col-index
-      const rowIndexAttr = (activeElement as HTMLElement).getAttribute(
-        "data-row-index"
-      );
-      const colIndexAttr = (activeElement as HTMLElement).getAttribute(
-        "data-col-index"
-      );
-      if (rowIndexAttr == null || colIndexAttr == null) return;
+
+      // Check for data attributes
+      const rowIndex = activeElement?.dataset?.rowIndex;
+      const colIndex = activeElement?.dataset?.colIndex;
+
+      if (!rowIndex || !colIndex) return;
 
       const moveFocus = (direction: "up" | "down" | "left" | "right") => {
         e.preventDefault();
-        const rowIndex = parseInt(rowIndexAttr);
-        const colIndex = parseInt(colIndexAttr);
-        let targetRow = rowIndex;
-        let targetCol = colIndex;
+        const currentRow = parseInt(rowIndex);
+        const currentCol = parseInt(colIndex);
+
+        let targetRow = currentRow;
+        let targetCol = currentCol;
+
         switch (direction) {
           case "up":
-            targetRow = Math.max(0, rowIndex - 1);
+            targetRow = Math.max(0, currentRow - 1);
             break;
           case "down":
-            targetRow = rowIndex + 1;
+            targetRow = currentRow + 1;
             break;
           case "left":
-            targetCol = Math.max(0, colIndex - 1);
+            targetCol = Math.max(0, currentCol - 1);
             break;
           case "right":
-            targetCol = colIndex + 1;
+            targetCol = currentCol + 1;
             break;
         }
-        // Find any element with the correct data-row-index and data-col-index
+
+        // Find target cell
         const selector = `[data-row-index="${targetRow}"][data-col-index="${targetCol}"]`;
-        const nextElem = tableContainerRef.current.querySelector(
+        const targetCell = tableContainerRef.current!.querySelector(
           selector
         ) as HTMLElement | null;
-        if (nextElem) {
-          // Try to focus the first focusable input/select/textarea inside the cell
-          const focusable = nextElem.querySelector(
-            "input, select, textarea, button"
-          ) as HTMLElement | null;
-          if (focusable) {
-            focusable.focus();
-            if (focusable instanceof HTMLInputElement) {
-              focusable.select();
+
+        if (targetCell) {
+          targetCell.focus();
+
+          // If user pressed a character key, start editing
+          if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+            const input = targetCell.querySelector("input, textarea");
+            if (input && input instanceof HTMLInputElement) {
+              input.value = e.key;
+              input.setSelectionRange(1, 1);
             }
-          } else {
-            nextElem.focus();
           }
         }
       };
 
+      // Navigation keys
       switch (e.key) {
         case "ArrowUp":
           moveFocus("up");
@@ -85,6 +88,31 @@ export const useSheetNavigation = (
           e.preventDefault();
           moveFocus(e.shiftKey ? "up" : "down");
           break;
+        case "Escape":
+          if (
+            activeElement.tagName === "INPUT" ||
+            activeElement.tagName === "SELECT"
+          ) {
+            (activeElement as HTMLElement).blur();
+          }
+          break;
+        default:
+          // Start editing if a character key is pressed
+          if (
+            e.key.length === 1 &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            activeElement.tagName !== "INPUT" &&
+            activeElement.tagName !== "TEXTAREA" &&
+            activeElement.tagName !== "SELECT"
+          ) {
+            const input = activeElement.querySelector("input");
+            if (input && input instanceof HTMLInputElement) {
+              input.value = e.key;
+              input.focus();
+              input.setSelectionRange(1, 1);
+            }
+          }
       }
     },
     [tableContainerRef]

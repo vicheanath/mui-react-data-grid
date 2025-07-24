@@ -6,10 +6,6 @@ import React, {
   useRef,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import DataSheetRow from "./components/DataSheetRow";
-import ActionCell from "./components/ActionCell";
-import type { DataRow, CellUpdatePayload } from "./types";
-
 import {
   useReactTable,
   getCoreRowModel,
@@ -33,55 +29,142 @@ import {
   Typography,
 } from "@mui/material";
 import { SheetTextInput } from "./components/SheetTextInput";
-import { apiService } from "./hooks/apiService";
+import { SheetSelect } from "./components/SheetSelect";
 import { SheetNumberInput } from "./components/SheetNumberInput";
+import DataSheetRow from "./components/DataSheetRow";
+import ActionCell from "./components/ActionCell";
+import { defaultApiService, type IApiService } from "./apiService";
+import type { DataRow, CellUpdatePayload } from "./types";
 
+const createColumn = <T extends keyof DataRow>(
+  key: T,
+  header: string,
+  handleCellChange: (id: string, key: keyof DataRow, value: unknown) => void,
+  handleSaveCell: (id: string, key: keyof DataRow, value: unknown) => void,
+  inputType: "text" | "number" | "select" = "text",
+  options?: { value: string; label: string }[],
+  colIndex: number = 0
+): ColumnDef<DataRow> => ({
+  accessorKey: key,
+  header,
+  cell: ({ row, getValue }) => {
+    const rawValue = getValue() as DataRow[T] | undefined | null;
+    const value = rawValue ?? "";
+    const commonProps = {
+      rowIndex: row.index,
+      colIndex,
+      value,
+      onBlur: () => {},
+      name: key,
+    };
 
+    switch (inputType) {
+      case "select":
+        return (
+          <SheetSelect
+            {...commonProps}
+            options={options || []}
+            onChange={(e) => {
+              const value = e.target.value as DataRow[T];
+              handleCellChange(row.original.id, key, value);
+              handleSaveCell(row.original.id, key, value);
+            }}
+          />
+        );
+      case "number":
+        return (
+          <SheetNumberInput
+            {...commonProps}
+            onChange={(e) => {
+              const val = e.target.value === "" ? null : Number(e.target.value);
+              handleCellChange(row.original.id, key, val);
+              handleSaveCell(row.original.id, key, val);
+            }}
+            onBlur={() => {
+              handleSaveCell(row.original.id, key, getValue());
+            }}
+            renderValue={(value) => {
+              if (value === "" || value === null) return "-";
+              if (key === "money") {
+                return Number(value).toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                });
+              }
+              return String(value);
+            }}
+          />
+        );
+      case "text":
+      default:
+        return (
+          <SheetTextInput
+            {...commonProps}
+            onChange={(e) => {
+              handleCellChange(row.original.id, key, e.target.value);
+              handleSaveCell(row.original.id, key, e.target.value);
+            }}
+            onBlur={() => {
+              handleSaveCell(row.original.id, key, getValue());
+            }}
+            renderValue={(value) => {
+              if (value === "" || value === null) return "-";
+              return String(value);
+            }}
+          />
+        );
+    }
+  },
+});
 
-// --- Main DataSheet Component ---
-export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
+interface DataSheetProps {
+  initialData?: DataRow[];
+  apiService?: IApiService;
+}
+
+const DataSheet: React.FC<DataSheetProps> = ({
   initialData = [],
+  apiService = defaultApiService,
 }) => {
-  // --- State ---
+  // State
   const [data, setData] = useState<DataRow[]>(initialData);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingSaves, setPendingSaves] = useState<CellUpdatePayload[]>([]);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  // Ref to track last saved data to prevent redundant saves
+  const savedDataRef = useRef<Record<string, DataRow>>({});
 
-  // --- Handlers ---
+  // Handlers
+  // Initialize savedDataRef with initialData
+  useEffect(() => {
+    const map: Record<string, DataRow> = {};
+    initialData.forEach((row) => {
+      map[row.id] = { ...row };
+    });
+    savedDataRef.current = map;
+  }, [initialData]);
+  // Handlers
   const handleCellChange = useCallback(
     (id: string, key: keyof DataRow, value: unknown) => {
       setData((prev) =>
-        prev.map((row) => {
-          if (row.id !== id) return row;
-          // Only update if value is different
-          if (row[key] === value) return row;
-          return { ...row, [key]: value };
-        })
+        prev.map((row) => (row.id === id ? { ...row, [key]: value } : row))
       );
     },
     []
   );
 
-  // Debounced save handler
   const handleSaveCell = useMemo(
     () =>
       debounce((id: string, key: keyof DataRow, value: unknown) => {
-        setData((prev) => {
-          const row = prev.find((r) => r.id === id);
-          if (!row || row[key] === value) {
-            // No change, skip save
-            return prev;
-          }
+        // only enqueue if changed from last saved value
+        const last = savedDataRef.current[id]?.[key];
+        if (last !== value) {
           setPendingSaves((pending) => [...pending, { id, key, value }]);
-          // Update data for optimistic UI
-          return prev.map((r) => (r.id === id ? { ...r, [key]: value } : r));
-        });
+        }
       }, 300),
     []
   );
 
-  // Add new row
   const addRow = useCallback(async () => {
     const newRow: Omit<DataRow, "id"> = {
       name: "",
@@ -89,236 +172,185 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
       email: "",
       date: new Date().toISOString().slice(0, 10),
       status: "pending",
+      money: undefined,
     };
+
     try {
       const newId = await apiService.addRow(newRow);
-      setData((prev) => [...prev, { id: newId, ...newRow }]);
-      // Focus first cell in new (last) row
+      const newRowComplete = { id: newId, ...newRow };
+      setData((prev) => [...prev, newRowComplete]);
+      savedDataRef.current[newId] = { ...newRowComplete };
+
+      // Focus first cell in new row
       setTimeout(() => {
-        const lastIndex =
-          (tableContainerRef.current?.querySelectorAll("tr").length ?? 1) - 2; // -1 for thead, -1 for 0-index
+        const newRowIndex = data.length;
         const firstCell = tableContainerRef.current?.querySelector(
-          `[data-row-index="${lastIndex}"][data-col-index="0"]`
+          `[data-row-index="${newRowIndex}"][data-col-index="0"]`
         ) as HTMLElement;
         firstCell?.focus();
       }, 100);
     } catch (error) {
       console.error("Failed to add row:", error);
     }
-  }, []);
+  }, [apiService, data.length]);
 
-  // Delete a single row
-  const deleteRow = useCallback(async (id: string) => {
-    try {
-      await apiService.deleteRows([id]);
-      setData((prev) => prev.filter((row) => row.id !== id));
-    } catch (error) {
-      console.error("Delete failed:", error);
-    }
-  }, []);
+  const deleteRow = useCallback(
+    async (id: string) => {
+      try {
+        await apiService.deleteRows([id]);
+        setData((prev) => prev.filter((row) => row.id !== id));
+        delete savedDataRef.current[id];
+      } catch (error) {
+        console.error("Delete failed:", error);
+      }
+    },
+    [apiService]
+  );
 
-  // --- Table Columns ---
+  // Columns
   const columns = useMemo<ColumnDef<DataRow>[]>(
     () => [
-      {
-        accessorKey: "name",
-        header: "Name",
-        cell: ({ row, getValue }) => (
-          <SheetTextInput
-            rowIndex={row.index}
-            colIndex={0}
-            value={getValue() as string}
-            onChange={(e) => {
-              handleCellChange(row.original.id, "name", e.target.value);
-              handleSaveCell(row.original.id, "name", e.target.value);
-            }}
-            onBlur={() =>
-              handleSaveCell(row.original.id, "name", getValue() as string)
-            }
-            renderValue={(value) => value}
-          />
-        ),
-      },
-      {
-        accessorKey: "age",
-        header: "Age",
-        cell: ({ row, getValue }) => (
-          <SheetNumberInput
-            rowIndex={row.index}
-            colIndex={1}
-            value={getValue() === null ? "" : (getValue() as number)}
-            onChange={(e) => {
-              const val = e.target.value === "" ? null : Number(e.target.value);
-              handleCellChange(row.original.id, "age", val);
-              handleSaveCell(row.original.id, "age", val);
-            }}
-            onBlur={() =>
-              handleSaveCell(
-                row.original.id,
-                "age",
-                getValue() as number | null
-              )
-            }
-            renderValue={(value) => value.replace(/[^\d]/g, "")}
-          />
-        ),
-      },
-      {
-        accessorKey: "email",
-        header: "Email",
-        cell: ({ row, getValue }) => (
-          <SheetTextInput
-            rowIndex={row.index}
-            colIndex={2}
-            value={getValue() as string}
-            onChange={(e) => {
-              handleCellChange(row.original.id, "email", e.target.value);
-              handleSaveCell(row.original.id, "email", e.target.value);
-            }}
-            onBlur={() =>
-              handleSaveCell(row.original.id, "email", getValue() as string)
-            }
-            renderValue={(value) => value.trim()}
-          />
-        ),
-      },
-      {
-        accessorKey: "money",
-        header: "Money",
-        cell: ({ row, getValue }) => {
-          // Always pass a string to renderValue
-          const rawValue = getValue();
-          const valueStr =
-            rawValue === null || rawValue === undefined ? "" : String(rawValue);
-          return (
-            <SheetNumberInput
-              rowIndex={row.index}
-              colIndex={5}
-              value={valueStr}
-              onChange={(e) => {
-                const val =
-                  e.target.value === ""
-                    ? null
-                    : Number(e.target.value.replace(/[^\d.-]/g, "")); // keep dash for negative numbers
-                handleCellChange(row.original.id, "money", val);
-                handleSaveCell(row.original.id, "money", val);
-              }}
-              onBlur={() => {
-                // Format value as currency on blur
-                const num = Number(valueStr);
-                if (!isNaN(num)) {
-                  handleCellChange(row.original.id, "money", num);
-                  handleSaveCell(row.original.id, "money", num);
-                } else {
-                  handleCellChange(row.original.id, "money", null);
-                  handleSaveCell(row.original.id, "money", null);
-                }
-              }}
-              renderValue={(value) => {
-                const num = Number(value);
-                if (isNaN(num) || value === "") return "";
-                return num.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                });
-              }}
-            />
-          );
-        },
-      },
+      createColumn(
+        "name",
+        "Name",
+        handleCellChange,
+        handleSaveCell,
+        "text",
+        undefined,
+        0
+      ),
+      createColumn(
+        "age",
+        "Age",
+        handleCellChange,
+        handleSaveCell,
+        "number",
+        undefined,
+        1
+      ),
+      createColumn(
+        "email",
+        "Email",
+        handleCellChange,
+        handleSaveCell,
+        "text",
+        undefined,
+        2
+      ),
+      createColumn(
+        "date",
+        "Date",
+        handleCellChange,
+        handleSaveCell,
+        "text",
+        undefined,
+        3
+      ),
+      createColumn(
+        "status",
+        "Status",
+        handleCellChange,
+        handleSaveCell,
+        "select",
+        [
+          { value: "pending", label: "Pending" },
+          { value: "active", label: "Active" },
+          { value: "completed", label: "Completed" },
+        ],
+        4
+      ),
+      createColumn(
+        "money",
+        "Balance",
+        handleCellChange,
+        handleSaveCell,
+        "number",
+        undefined,
+        5
+      ),
       {
         id: "actions",
         header: "Actions",
-        cell: ({ row }) => {
-          // Show spinner if this row is being saved
-          const isRowSaving = pendingSaves.some(
-            (p) => p.id === row.original.id
-          );
-          return (
-            <Box display="flex" alignItems="center" gap={1}>
-              <ActionCell onDelete={() => deleteRow(row.original.id)} />
-              {isRowSaving && (
-                <CircularProgress size={18} thickness={5} color="primary" />
-              )}
-            </Box>
-          );
-        },
+        cell: ({ row }) => (
+          <ActionCell onDelete={() => deleteRow(row.original.id)} />
+        ),
       },
     ],
-    [handleCellChange, handleSaveCell, deleteRow, pendingSaves]
+    [deleteRow, handleCellChange, handleSaveCell]
   );
 
-  // --- Table Instance & Virtualizer ---
+  // Table instance
   const table = useReactTable<DataRow>({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getRowId: (originalRow) => originalRow.id,
+    getRowId: (row) => row.id,
   });
+
+  // Virtualization
   const rowVirtualizer = useVirtualizer({
     count: table.getRowModel().rows.length,
     getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 48, // Approximate row height (px)
-    overscan: 8,
+    estimateSize: () => 48,
+    overscan: 20,
   });
 
-  // --- Keyboard Navigation ---
-  useSheetNavigation(tableContainerRef as React.RefObject<HTMLDivElement>);
+  // Navigation
+  useSheetNavigation(tableContainerRef);
 
-  // --- Effect: Process Pending Saves ---
+  // Process pending saves
   useEffect(() => {
     if (pendingSaves.length === 0) return;
-    setIsSaving(true);
+
     const processSaves = async () => {
-      const toSave = Array.from(new Set(pendingSaves.map((s) => s.id)));
-      for (const id of toSave) {
-        const rowSaves = pendingSaves.filter((s) => s.id === id);
+      setIsSaving(true);
+      const saveMap = new Map<string, CellUpdatePayload[]>();
+
+      // Group saves by row ID
+      pendingSaves.forEach((save) => {
+        if (!saveMap.has(save.id)) saveMap.set(save.id, []);
+        saveMap.get(save.id)?.push(save);
+      });
+
+      // Process each row's saves
+      for (const [id, saves] of saveMap.entries()) {
         try {
-          await Promise.all(
-            rowSaves.map((s) =>
-              apiService.saveCell({ id: s.id, key: s.key, value: s.value })
-            )
-          );
-          setData((prev) =>
-            prev.map((row) => {
-              if (row.id !== id) return row;
-              const updatedRow = { ...row };
-              for (const s of rowSaves) {
-                (updatedRow as Record<string, unknown>)[s.key] = s.value;
-              }
-              return updatedRow;
-            })
-          );
+          await Promise.all(saves.map((save) => apiService.saveCell(save)));
+          // update saved values to prevent redundant future saves
+          const rowData = savedDataRef.current[id];
+          if (rowData) {
+            saves.forEach((save) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (rowData as any)[save.key] = save.value;
+            });
+          }
         } catch (error) {
           console.error("Error saving row:", id, error);
         }
       }
-      setPendingSaves((prev) => prev.filter((s) => !toSave.includes(s.id)));
+
+      // Remove processed saves
+      setPendingSaves((prev) => prev.filter((save) => !saveMap.has(save.id)));
     };
+
     processSaves().finally(() => setIsSaving(false));
-  }, [pendingSaves]);
+  }, [pendingSaves, apiService]);
 
   return (
-    <Paper elevation={3} sx={{ borderRadius: 2, overflow: "hidden" }}>
+    <Paper elevation={2} sx={{ borderRadius: 2, overflow: "hidden", p: 1 }}>
       <TableContainer
         ref={tableContainerRef}
         sx={{
-          maxHeight: "calc(100vh - 200px)",
+          maxHeight: "70vh",
           overflowY: "auto",
-          "&::-webkit-scrollbar": {
-            width: 8,
-            backgroundColor: "transparent",
-          },
+          "&::-webkit-scrollbar": { width: 8 },
           "&::-webkit-scrollbar-thumb": {
             backgroundColor: "#888",
             borderRadius: 4,
           },
-          "&::-webkit-scrollbar-thumb:hover": {
-            backgroundColor: "#555",
-          },
         }}
       >
-        <Table stickyHeader>
+        <Table stickyHeader size="small">
           <TableHead>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -328,40 +360,23 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
                     sx={{
                       position: "sticky",
                       top: 0,
-                      background: "#f5f5f5",
+                      background: "#f5f7fa",
                       zIndex: 1,
                       borderBottom: "2px solid #1976d2",
                       p: 1,
-                      whiteSpace: "nowrap",
                       fontWeight: "bold",
-                      fontSize: "0.875rem",
-                      color: "#333",
-                      "&:last-child": { borderRight: 0 },
                     }}
                   >
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        height: "100%",
-                        padding: "0 8px",
-                        userSelect: "none",
-                        position: "relative",
-                        zIndex: 1,
-                      }}
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                    </div>
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext()
+                    )}
                   </TableCell>
                 ))}
               </TableRow>
             ))}
           </TableHead>
           <TableBody>
-            {/* Top spacer */}
             {rowVirtualizer.getVirtualItems().length > 0 && (
               <tr
                 style={{
@@ -369,7 +384,7 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
                 }}
               />
             )}
-            {/* Render only the visible rows */}
+
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const row = table.getRowModel().rows[virtualRow.index];
               return (
@@ -378,16 +393,17 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
                   row={row}
                   pendingSaves={pendingSaves}
                   deleteRow={deleteRow}
+                  style={{ height: 48 }}
                 />
               );
             })}
-            {/* Bottom spacer */}
+
             {rowVirtualizer.getVirtualItems().length > 0 && (
               <tr
                 style={{
                   height: `${
                     rowVirtualizer.getTotalSize() -
-                    (rowVirtualizer.getVirtualItems().at(-1)?.end ?? 0)
+                    (rowVirtualizer.getVirtualItems().at(-1)?.end || 0)
                   }px`,
                 }}
               />
@@ -395,39 +411,38 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
           </TableBody>
         </Table>
       </TableContainer>
+
       <Box
         sx={{
           display: "flex",
           justifyContent: "space-between",
-          p: 1,
+          alignItems: "center",
+          p: 2,
           borderTop: "1px solid #e0e0e0",
           backgroundColor: "#fafafa",
         }}
       >
         <Typography variant="body2" color="textSecondary">
-          {data.length} row
-          {data.length !== 1 && "s"} found.
+          {data.length} row{data.length !== 1 && "s"}
         </Typography>
+
         <Button
           variant="contained"
           color="primary"
-          size="small"
           onClick={addRow}
           disabled={isSaving}
-          sx={{
-            borderRadius: 1,
-            textTransform: "none",
-            fontSize: "0.875rem",
-            padding: "6px 12px",
-          }}
+          startIcon={
+            isSaving ? (
+              <CircularProgress size={20} color="inherit" />
+            ) : undefined
+          }
+          sx={{ minWidth: 120 }}
         >
-          {isSaving ? (
-            <CircularProgress size={24} color="inherit" />
-          ) : (
-            "Add Row"
-          )}
+          {isSaving ? "Saving..." : "Add Row"}
         </Button>
       </Box>
     </Paper>
   );
 };
+
+export default DataSheet;

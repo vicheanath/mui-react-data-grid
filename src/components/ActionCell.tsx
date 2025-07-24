@@ -2,22 +2,34 @@ import { Box, Button } from "@mui/material";
 
 interface ActionCellProps {
   onDelete: () => void;
-  // Add more actions as needed
+  onEdit?: () => void;
 }
 
-const ActionCell: React.FC<ActionCellProps> = ({ onDelete }) => {
+const ActionCell: React.FC<ActionCellProps> = ({ onDelete, onEdit }) => {
   return (
-    <Box padding={2} display="flex" alignItems="center">
+    <Box display="flex" alignItems="center" gap={1}>
       <Button
         type="button"
         variant="contained"
         color="error"
-        className="px-2 py-1 m-1"
+        size="small"
         onClick={onDelete}
+        sx={{ minWidth: 80 }}
       >
         Delete
       </Button>
-      {/* Add more action buttons here */}
+      {onEdit && (
+        <Button
+          type="button"
+          variant="contained"
+          color="primary"
+          size="small"
+          onClick={onEdit}
+          sx={{ minWidth: 80 }}
+        >
+          Edit
+        </Button>
+      )}
     </Box>
   );
 };
