@@ -31,6 +31,7 @@ import {
 import { SheetTextInput } from "./components/SheetTextInput";
 import { SheetSelect } from "./components/SheetSelect";
 import { SheetNumberInput } from "./components/SheetNumberInput";
+import { SheetDateInput } from "./components/SheetDateInput";
 import DataSheetRow from "./components/DataSheetRow";
 import ActionCell from "./components/ActionCell";
 import { defaultApiService, type IApiService } from "./apiService";
@@ -41,7 +42,7 @@ const createColumn = <T extends keyof DataRow>(
   header: string,
   handleCellChange: (id: string, key: keyof DataRow, value: unknown) => void,
   handleSaveCell: (id: string, key: keyof DataRow, value: unknown) => void,
-  inputType: "text" | "number" | "select" = "text",
+  inputType: "text" | "number" | "select" | "date" = "text",
   options?: { value: string; label: string }[],
   colIndex: number = 0
 ): ColumnDef<DataRow> => ({
@@ -92,6 +93,20 @@ const createColumn = <T extends keyof DataRow>(
                 });
               }
               return String(value);
+            }}
+          />
+        );
+      case "date":
+        return (
+          <SheetDateInput
+            {...commonProps}
+            onChange={(e) => {
+              const val = e.target.value as DataRow[T];
+              handleCellChange(row.original.id, key, val);
+              handleSaveCell(row.original.id, key, val);
+            }}
+            onBlur={() => {
+              handleSaveCell(row.original.id, key, getValue());
             }}
           />
         );
@@ -242,7 +257,7 @@ const DataSheet: React.FC<DataSheetProps> = ({
         "Date",
         handleCellChange,
         handleSaveCell,
-        "text",
+        "date",
         undefined,
         3
       ),

@@ -25,7 +25,8 @@ export const useSheetNavigation = (
       const rowIndex = activeElement?.dataset?.rowIndex;
       const colIndex = activeElement?.dataset?.colIndex;
 
-      if (!rowIndex || !colIndex) return;
+      // Only proceed if data attributes are present
+      if (rowIndex == null || colIndex == null) return;
 
       const moveFocus = (direction: "up" | "down" | "left" | "right") => {
         e.preventDefault();
@@ -50,6 +51,13 @@ export const useSheetNavigation = (
             break;
         }
 
+        // Prevent focus if at top or left boundary with no movement
+        if (
+          (direction === "up" && targetRow === currentRow) ||
+          (direction === "left" && targetCol === currentCol)
+        ) {
+          return;
+        }
         // Find target cell
         const selector = `[data-row-index="${targetRow}"][data-col-index="${targetCol}"]`;
         const targetCell = tableContainerRef.current!.querySelector(

@@ -12,6 +12,10 @@ export interface SheetInputProps {
   renderValue?: (value: string) => string;
   padding?: number | string;
   name?: string;
+  /**
+   * The HTML input type for the text field (e.g., "text", "date", "email").
+   */
+  type?: string;
 }
 
 export const SheetTextInput = React.memo(
