@@ -64,8 +64,8 @@ const initialData: DataRow[] = Array.from({ length: 100 }, (_, i) => {
 
 const App: React.FC = () => {
   return (
-    <div className="max-w-6xl mx-auto py-8">
-      <h1 className="text-2xl font-bold mb-6">Data Sheet</h1>
+    <div>
+      <h1>Data Sheet</h1>
       <DataSheet initialData={initialData} />
     </div>
   );
