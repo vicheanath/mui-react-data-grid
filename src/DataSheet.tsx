@@ -262,26 +262,13 @@ const DataSheet: React.FC<DataSheetProps> = ({
         3
       ),
       createColumn(
-        "status",
-        "Status",
-        handleCellChange,
-        handleSaveCell,
-        "select",
-        [
-          { value: "pending", label: "Pending" },
-          { value: "active", label: "Active" },
-          { value: "completed", label: "Completed" },
-        ],
-        4
-      ),
-      createColumn(
         "money",
         "Balance",
         handleCellChange,
         handleSaveCell,
         "number",
         undefined,
-        5
+        4
       ),
       {
         id: "actions",

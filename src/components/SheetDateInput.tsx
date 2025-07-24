@@ -1,15 +1,13 @@
 import React, { useState } from "react";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import { GlobalStyles } from "@mui/material";
 import type { SheetInputProps } from "./SheetTextInput";
 import { SheetCellBase } from "./SheetCellBase";
-import { ClickAwayListener } from "@mui/material";
-import dayjs, { Dayjs } from "dayjs";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import { DesktopDatePicker } from "@mui/x-date-pickers/DesktopDatePicker";
 
-/**
- * A date input cell that uses HTML date picker.
- */
+// Extend dayjs for strict parsing of YYYY-MM-DD
+dayjs.extend(customParseFormat);
+
 export const SheetDateInput = React.memo(
   React.forwardRef<HTMLInputElement, SheetInputProps>(
     function SheetDateInputComponent(
@@ -17,18 +15,41 @@ export const SheetDateInput = React.memo(
       ref
     ) {
       const [focused, setFocused] = useState(false);
-      const dateValue: Dayjs | null = value ? dayjs(String(value)) : null;
-      const displayValue = dateValue
-        ? dateValue.toISOString().slice(0, 10)
-        : "";
+      const [error, setError] = useState(false);
+      const valueString = value === null ? "" : String(value);
+
+      // On blur, validate and reformat
+      const handleBlurField = () => {
+        if (valueString) {
+          const parsed = dayjs(valueString, "YYYY-MM-DD", true);
+          if (!parsed.isValid()) {
+            setError(true);
+            return;
+          }
+          setError(false);
+          const formatted = parsed.format("YYYY-MM-DD");
+          if (formatted !== valueString) {
+            const evt = {
+              target: { name: name ?? "", value: formatted },
+            } as React.ChangeEvent<HTMLInputElement>;
+            onChange(evt);
+          }
+        } else {
+          setError(false);
+        }
+        setFocused(false);
+        onBlur();
+      };
 
       return (
-        <ClickAwayListener
-          onClickAway={() => {
-            setFocused(false);
-            onBlur();
-          }}
-        >
+        <>
+        <GlobalStyles
+            styles={{
+              ".hide-date-input::-webkit-calendar-picker-indicator": { display: "none" },
+              ".hide-date-input::-webkit-inner-spin-button, .hide-date-input::-webkit-clear-button": { display: "none" },
+              ".hide-date-input::-ms-clear, .hide-date-input::-ms-expand": { display: "none" },
+            }}
+          />
           <SheetCellBase
             rowIndex={rowIndex}
             colIndex={colIndex}
@@ -39,56 +60,42 @@ export const SheetDateInput = React.memo(
             onClick={() => setFocused(true)}
           >
             {focused ? (
-              <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DesktopDatePicker
-                  format="yyyy-MM-dd"
-                  value={dateValue}
-                  onChange={(date) => {
-                    const newVal = date ? date.toISOString().slice(0, 10) : "";
-                    const event = {
-                      target: { value: newVal, name: name ?? "" },
-                    } as unknown as React.ChangeEvent<HTMLInputElement>;
-                    onChange(event);
-                  }}
-                  onAccept={onBlur}
-                  onClose={onBlur}
-                  slotProps={{
-                    textField: {
-                      inputRef: ref,
-                      variant: "standard",
-                      onBlur,
-                      fullWidth: true,
-                      InputProps: {
-                        disableUnderline: true,
-                        style: {
-                          fontFamily: "monospace",
-                          fontSize: 15,
-                          padding: 0,
-                          minWidth: 80,
-                        },
-                      },
-                      inputProps: {
-                        "data-row-index": rowIndex,
-                        "data-col-index": colIndex,
-                      },
-                    },
-                  }}
-                />
-              </LocalizationProvider>
+              <input
+                className="hide-date-input"
+                ref={ref}
+                type="date"
+                value={valueString}
+                onChange={(e) =>
+                  onChange(e as React.ChangeEvent<HTMLInputElement>)
+                }
+                onBlur={handleBlurField}
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 15,
+                  padding: 0,
+                  minWidth: 80,
+                  width: "100%",
+                  border: "none",
+                  boxSizing: "border-box",
+                  outline: error ? "1px solid red" : "none",
+                }}
+                data-row-index={rowIndex}
+                data-col-index={colIndex}
+              />
             ) : (
               <span
                 style={{
                   fontFamily: "monospace",
                   fontSize: 15,
                   minWidth: 80,
-                  color: displayValue ? undefined : "#aaa",
+                  color: valueString ? undefined : "#aaa",
                 }}
               >
-                {displayValue || "-"}
+                {valueString || "-"}
               </span>
             )}
           </SheetCellBase>
-        </ClickAwayListener>
+        </>
       );
     }
   )

@@ -63,9 +63,8 @@ const initialData: DataRow[] = Array.from({ length: 100 }, (_, i) => {
   const name = getRandomName(i);
   const age = 20 + (i % 40);
   const email = `${name.toLowerCase().replace(/ /g, "_")}@example.com`;
-  const status = getRandomStatus(i);
   const money = Math.round((Math.random() * 10000000000 + i * 10) * 100) / 100;
-  return { id, name, age, email, status, money };
+  return { id, name, age, email, money };
 });
 
 const App: React.FC = () => {

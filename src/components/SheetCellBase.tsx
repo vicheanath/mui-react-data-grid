@@ -56,7 +56,6 @@ export const SheetCellBase = React.forwardRef<
       }}
       sx={{
         border: focused ? "2px solid #1976d2" : "1.5px solid transparent",
-        borderRadius: 1,
         transition: "border 0.2s",
         width: "100%",
         height: "100%",
