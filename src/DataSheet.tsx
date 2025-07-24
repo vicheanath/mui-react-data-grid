@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import DataSheetRow from "./components/DataSheetRow";
 import ActionCell from "./components/ActionCell";
 import type { DataRow, CellUpdatePayload } from "./types";
@@ -31,37 +32,11 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
+import { SheetTextInput } from "./components/SheetTextInput";
+import { apiService } from "./hooks/apiService";
+import { SheetNumberInput } from "./components/SheetNumberInput";
 
-import {
-  SheetNumberInput,
-  SheetSelect,
-  SheetTextInput,
-  SheetDateInput,
-} from "./components/SheetInputs";
 
-// --- Types ---
-// ...types moved to types.ts...
-
-// --- Mock API Service ---
-const apiService = {
-  saveCell: async (payload: CellUpdatePayload): Promise<void> => {
-    // Simulate API call
-    console.log("Saving cell:", payload);
-    return new Promise((resolve) => setTimeout(resolve, 500));
-  },
-  deleteRows: async (ids: string[]): Promise<void> => {
-    // Simulate API call
-    console.log("Deleting rows:", ids);
-    return new Promise((resolve) => setTimeout(resolve, 500));
-  },
-  addRow: async (row: Omit<DataRow, "id">): Promise<string> => {
-    // Simulate API call
-    console.log("Adding row:", row);
-    return new Promise((resolve) =>
-      setTimeout(() => resolve(`new-${Date.now()}`), 500)
-    );
-  },
-};
 
 // --- Main DataSheet Component ---
 export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
@@ -72,9 +47,6 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [pendingSaves, setPendingSaves] = useState<CellUpdatePayload[]>([]);
   const tableContainerRef = useRef<HTMLDivElement>(null);
-
-  // --- Keyboard Navigation ---
-  useSheetNavigation(tableContainerRef as React.RefObject<HTMLDivElement>);
 
   // --- Handlers ---
   const handleCellChange = useCallback(
@@ -211,48 +183,6 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
         ),
       },
       {
-        accessorKey: "date",
-        header: "Date",
-        cell: ({ row, getValue }) => (
-          <SheetDateInput
-            rowIndex={row.index}
-            colIndex={3}
-            value={getValue() as string}
-            onChange={(e) => {
-              handleCellChange(row.original.id, "date", e.target.value);
-              handleSaveCell(row.original.id, "date", e.target.value);
-            }}
-            onBlur={() =>
-              handleSaveCell(row.original.id, "date", getValue() as string)
-            }
-            renderValue={(value) => value.replaceAll("/", "-")}
-          />
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: "Status",
-        cell: ({ row, getValue }) => (
-          <SheetSelect
-            rowIndex={row.index}
-            colIndex={4}
-            value={getValue() as string}
-            onChange={(e) => {
-              handleCellChange(row.original.id, "status", e.target.value);
-              handleSaveCell(row.original.id, "status", e.target.value);
-            }}
-            onBlur={() =>
-              handleSaveCell(row.original.id, "status", getValue() as string)
-            }
-            options={[
-              { value: "active", label: "Active" },
-              { value: "inactive", label: "Inactive" },
-              { value: "pending", label: "Pending" },
-            ]}
-          />
-        ),
-      },
-      {
         accessorKey: "money",
         header: "Money",
         cell: ({ row, getValue }) => {
@@ -318,13 +248,22 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
     [handleCellChange, handleSaveCell, deleteRow, pendingSaves]
   );
 
-  // --- Table Instance ---
+  // --- Table Instance & Virtualizer ---
   const table = useReactTable<DataRow>({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (originalRow) => originalRow.id,
   });
+  const rowVirtualizer = useVirtualizer({
+    count: table.getRowModel().rows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 48, // Approximate row height (px)
+    overscan: 8,
+  });
+
+  // --- Keyboard Navigation ---
+  useSheetNavigation(tableContainerRef as React.RefObject<HTMLDivElement>);
 
   // --- Effect: Process Pending Saves ---
   useEffect(() => {
@@ -422,14 +361,37 @@ export const DataSheet: React.FC<{ initialData?: DataRow[] }> = ({
             ))}
           </TableHead>
           <TableBody>
-            {table.getRowModel().rows.map((row) => (
-              <DataSheetRow
-                key={row.id}
-                row={row}
-                pendingSaves={pendingSaves}
-                deleteRow={deleteRow}
+            {/* Top spacer */}
+            {rowVirtualizer.getVirtualItems().length > 0 && (
+              <tr
+                style={{
+                  height: `${rowVirtualizer.getVirtualItems()[0].start}px`,
+                }}
               />
-            ))}
+            )}
+            {/* Render only the visible rows */}
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = table.getRowModel().rows[virtualRow.index];
+              return (
+                <DataSheetRow
+                  key={row.id}
+                  row={row}
+                  pendingSaves={pendingSaves}
+                  deleteRow={deleteRow}
+                />
+              );
+            })}
+            {/* Bottom spacer */}
+            {rowVirtualizer.getVirtualItems().length > 0 && (
+              <tr
+                style={{
+                  height: `${
+                    rowVirtualizer.getTotalSize() -
+                    (rowVirtualizer.getVirtualItems().at(-1)?.end ?? 0)
+                  }px`,
+                }}
+              />
+            )}
           </TableBody>
         </Table>
       </TableContainer>

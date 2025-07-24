@@ -58,13 +58,13 @@ function getRandomStatus(i: number) {
   return statuses[i % statuses.length];
 }
 
-const initialData: DataRow[] = Array.from({ length: 200 }, (_, i) => {
+const initialData: DataRow[] = Array.from({ length: 500 }, (_, i) => {
   const id = (i + 1).toString();
   const name = getRandomName(i);
   const age = 20 + (i % 40);
   const email = `${name.toLowerCase().replace(/ /g, "_")}@example.com`;
   const status = getRandomStatus(i);
-  const money = Math.round((Math.random() * 100000 + i * 10) * 100) / 100;
+  const money = Math.round((Math.random() * 10000000000 + i * 10) * 100) / 100;
   return { id, name, age, email, status, money };
 });
 
